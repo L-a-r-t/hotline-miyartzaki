@@ -30,11 +30,11 @@ export default function AdminCreateMealPage() {
   }
 
   const addMeal = async (data: any) => {
-    const { name, desc, isVegetarian } = data
+    const { name, desc, price, isVegetarian } = data
     await createMeal({
       name,
       desc,
-      price: 0,
+      price,
       isVegetarian,
       ingredients,
     } as any)
@@ -80,12 +80,13 @@ export default function AdminCreateMealPage() {
           <label className="-mb-2" htmlFor="price">
             Prix (si commandé en extra)
           </label>
-          {/* <input
+          <input
             type="number"
             id="price"
+            defaultValue={0}
             className="border border-gray-200 p-2 rounded"
             {...register("price", { required: true, valueAsNumber: true })}
-          /> */}
+          />
           <div className="flex items-center gap-2">
             <input
               type="checkbox"

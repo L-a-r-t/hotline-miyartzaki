@@ -134,6 +134,7 @@ export default function HotlinePage() {
               price: sectionName.includes("salée") ? 1.5 : 0,
               items: [],
             }
+          acc[sectionName].price += meal.price * meal.qty
           acc[sectionName].items.push({
             time: "hotline",
             menu: menu.name,
@@ -341,7 +342,8 @@ export default function HotlinePage() {
                                         }`}
                                         onClick={() => openModalWithMeal(meal)}
                                       >
-                                        {meal.name}
+                                        {meal.name}{" "}
+                                        {meal.price > 0 && `(${meal.price}€)`}
                                         {meal.isVegetarian && (
                                           <FontAwesomeIcon
                                             icon={faLeaf}
