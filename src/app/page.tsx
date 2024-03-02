@@ -1,113 +1,648 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import Image from "next/image"
+import { redirect, useRouter } from "next/navigation"
+import { useContext, useEffect, useMemo, useState } from "react"
+import {
+  DaySettings,
+  Delivery,
+  FullMenu,
+  HotlineDevlieryOption,
+  HotlineMenu,
+  OrderRecap,
+} from "@/utils/types"
+import dayjs from "dayjs"
+import Link from "next/link"
+import { Disclosure, Transition } from "@headlessui/react"
+import createReservation from "@/api/client/createReservation"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import useAuth from "@/hooks/auth"
+import { ModalContext } from "@/context/modal"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faChevronDown, faLeaf } from "@fortawesome/free-solid-svg-icons"
+import { doc, onSnapshot } from "firebase/firestore"
+import { firestore } from "@/config/firebase"
+import NavWrapper from "@/components/nav"
+import Spinner from "@/components/spinner"
+import customParseFormat from "dayjs/plugin/customParseFormat"
+import { dayjsWithDelta, entries, values } from "@/utils/functions"
+import { useForm } from "react-hook-form"
+import Background from "@/components/background"
+
+dayjs.extend(customParseFormat)
+
+export default function HotlinePage() {
+  const user = useAuth()
+  const { openModalWithMeal } = useContext(ModalContext)
+
+  const [menu, setMenu] = useState<HotlineMenu | null>(null)
+  const [isHotlineOpen, setHotlineStatus] = useState(false)
+  const [askedDeliveryTime, setAskedDeliveryTime] = useState("12h00")
+  const [livesOutsideResidence, setlivesOutsideResidence] = useState(false)
+  const [deliveryTimes, setDeliveryTimes] = useState<string[]>([])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      doc(firestore, "menus", "HOTLINE"),
+      (snapshot) => {
+        const _menu = snapshot.data() as HotlineMenu
+        setMenu(_menu)
+      }
+    )
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      doc(firestore, "global", "hotlines"),
+      (snapshot) => {
+        setHotlineStatus(snapshot.data()?.active)
+      }
+    )
+    return unsubscribe
+  }, [])
+
+  const {
+    register,
+    getValues,
+    formState: { isValid, errors },
+    watch,
+    reset,
+  } = useForm()
+
+  const queryClient = useQueryClient()
+
+  const { isPending, mutate } = useMutation({
+    mutationKey: ["createOrder"],
+    mutationFn: () => {
+      const {
+        delivery: {
+          address,
+          address2,
+          city,
+          residence,
+          chamber,
+          additionalInfo,
+          deliveryTime,
+        },
+      } = getValues()
+      const delivery: Delivery = residence
+        ? {
+            type: "residence",
+            residence: JSON.parse(residence).place as string,
+            chamber,
+            deliveryTime,
+            additionalInfo: additionalInfo ?? null,
+          }
+        : {
+            type: "city",
+            address,
+            address2: address2 ?? null,
+            city: JSON.parse(city).place as string,
+            deliveryTime,
+            additionalInfo: additionalInfo ?? null,
+          }
+      return createReservation({
+        orderRecap,
+        userId: user !== "loading" ? user!.uid : "", // faut faire plaisir à typescript
+        date: dayjs().valueOf(),
+        targetDay: dayjsWithDelta(1).format("YYYY-MM-DD"),
+        delivery,
+        type: "hotline",
+      })
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ["order"],
+      })
+      router.replace("/order/" + data.id)
+    },
+  })
+
+  const router = useRouter()
+
+  const orderRecap = useMemo(() => {
+    let acc = {} as OrderRecap
+    if (!menu) return { HOTLINE: { price: 0, items: [] } }
+    entries(menu.content).forEach(([sectionName, section]) => {
+      values(section.meals).forEach((meal) => {
+        if (meal.qty !== undefined && meal.qty > 0) {
+          if (!acc[sectionName])
+            acc[sectionName] = {
+              price: sectionName.includes("salée") ? 1.5 : 0,
+              items: [],
+            }
+          acc[sectionName].items.push({
+            time: "hotline",
+            menu: menu.name,
+            menuId: menu.id,
+            section: sectionName,
+            meal: meal.name,
+            mealId: meal.id,
+            isVegetarian: meal.isVegetarian,
+            qty: meal.qty,
+            price: meal.price,
+          })
+        }
+      })
+    })
+    return acc
+  }, [menu])
+
+  const deliveryOptions: HotlineDevlieryOption[] = [
+    {
+      type: "residence",
+      place: "Jean d'Ormesson",
+    },
+    {
+      type: "residence",
+      place: "Alexandre Manceau",
+    },
+    {
+      type: "residence",
+      place: "UXCO",
+    },
+    {
+      type: "residence",
+      place: "ALJT",
+    },
+    {
+      type: "residence",
+      place: "ASS",
+    },
+    {
+      type: "residence",
+      place: "Twenty Palaiseau",
+    },
+    {
+      type: "residence",
+      place: "Kley",
+    },
+    {
+      type: "residence",
+      place: "Georges Sand",
+      deliveryTime: "20h30",
+    },
+    {
+      type: "residence",
+      place: "Eileen Gray",
+      deliveryTime: "20h30",
+    },
+    {
+      type: "residence",
+      place: "Twenty Gif",
+      deliveryTime: "20h30",
+    },
+    {
+      type: "city",
+      place: "Palaiseau",
+      deliveryTime: "22h",
+    },
+    {
+      type: "city",
+      place: "Massy",
+      deliveryTime: "22h",
+    },
+  ]
+
+  useEffect(() => {
+    const _ = watch((data, { name }) => {
+      if (name != "delivery.city" && name != "delivery.residence") return
+      const place =
+        name == "delivery.city" ? data.delivery.city : data.delivery.residence
+      const deliveryTime = JSON.parse(place).deliveryTime
+      if (deliveryTime) {
+        setDeliveryTimes([deliveryTime])
+      } else {
+        setDeliveryTimes(
+          new Array(8).fill(0).map((_, i) =>
+            dayjs(dayjs().format("YYYY-MM-DDTHH:00:00"))
+              .add(i + 1, "h")
+              .format("HH[h]mm")
+          )
+        )
+      }
+    })
+    return _.unsubscribe
+  }, [watch])
+
+  const incrementMeal = (
+    increment: number,
+    {
+      sectionName,
+      mealIndex,
+    }: {
+      sectionName: string
+      mealIndex: number
+    }
+  ) => {
+    if (!menu) return
+    const content = Object.entries(menu.content).reduce(
+      (acc, [name, section]) => {
+        const sameSection = name === sectionName
+        section.meals = Object.values(section.meals).map((meal, index) => {
+          const sameMeal = sameSection && index === mealIndex
+          if (meal.qty === undefined) meal.qty = 0
+          meal.qty += sameMeal ? increment : 0
+          return meal
+        })
+        return acc
+      },
+      { ...menu.content }
+    )
+    setMenu((prev) => (prev == null ? prev : { ...prev, content }))
+  }
+
+  const needsDeliveryInfo = useMemo(
+    () =>
+      values(orderRecap).some((order) =>
+        order.items.some((item) => item.time === "hotline")
+      ),
+    [orderRecap]
+  )
+
+  const missingDeliveryInfo = useMemo(
+    () => needsDeliveryInfo && !isValid,
+    [needsDeliveryInfo, isValid]
+  )
+
+  if (user === "loading" || user === null) return <div />
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
+    <NavWrapper>
+      <div className="relative min-h-screen flex flex-col">
+        {/* <header className="sticky top-0 flex justify-between items-center p-4 px-8 bg-purple-950 bg-opacity-20 backdrop-blur-sm shadow-xl shadow-purple-950/10"> */}
+        <header className="top-0 flex flex-col sm:flex-row justify-between items-center p-8 pb-4">
+          <Image src={"/logo.svg"} alt="Logo" width={100} height={100} />
+          <p className="text-2xl md:text-4xl text-center font-bold mt-4">
+            La hotline est {isHotlineOpen ? "OUVERTE" : "FERMÉE"}
+          </p>
+          {!isHotlineOpen && (
+            <p className="text-sm text-center">Repasse plus tard</p>
+          )}
+        </header>
+        {isHotlineOpen ? (
+          <main className="md:flex flex-grow flex flex-col items-center justify-between gap-4">
+            {menu ? (
+              <div className="flex flex-col gap-4 p-4 w-full max-w-96">
+                {Object.entries(menu.content)
+                  .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+                  .map(([sectionName, section]) => (
+                    <Disclosure
+                      as={"div"}
+                      key={sectionName}
+                      className="rounded-xl bg shadow-2xl shadow-blue-950/15 flex flex-col"
+                    >
+                      <Disclosure.Button className="flex p-2 px-4 justify-between items-center font-semibold">
+                        <h2 className="text-lg">{sectionName}</h2>
+                      </Disclosure.Button>
+                      <Disclosure.Panel>
+                        <div className="flex flex-col gap-2 px-4 pb-4">
+                          <div className="flex flex-col gap-4">
+                            {Object.values(section.meals).map(
+                              (meal, mealIndex) => {
+                                const stock =
+                                  meal.stock < 0
+                                    ? sectionName.includes("salée")
+                                      ? 1
+                                      : 3
+                                    : 0
+                                return (
+                                  <div
+                                    key={menu.id + sectionName + meal.id}
+                                    className="flex justify-between items-center gap-2"
+                                  >
+                                    <div>
+                                      <h4
+                                        className={`cursor-pointer ${
+                                          stock == undefined ||
+                                          (stock <= 0 && "text-gray-400")
+                                        }`}
+                                        onClick={() => openModalWithMeal(meal)}
+                                      >
+                                        {meal.name}
+                                        {meal.isVegetarian && (
+                                          <FontAwesomeIcon
+                                            icon={faLeaf}
+                                            className={`${
+                                              stock == undefined || stock <= 0
+                                                ? "text-gray-'00"
+                                                : "text-green-700"
+                                            } ml-2`}
+                                          />
+                                        )}
+                                      </h4>
+                                    </div>
+                                    {stock > 0 && (
+                                      <div className="flex items-center gap-2">
+                                        {meal.qty !== undefined &&
+                                          meal.qty > 0 && (
+                                            <>
+                                              <button
+                                                onClick={() =>
+                                                  incrementMeal(-1, {
+                                                    sectionName,
+                                                    mealIndex,
+                                                  })
+                                                }
+                                                className="bg-gray-200 rounded-full w-6 h-6 flex items-center justify-center"
+                                              >
+                                                -
+                                              </button>
+                                              <p className="w-4 text-center">
+                                                {meal.qty ?? 0}
+                                              </p>
+                                            </>
+                                          )}
+                                        {(meal.qty === undefined ||
+                                          meal.qty < stock) && (
+                                          <button
+                                            onClick={() =>
+                                              incrementMeal(1, {
+                                                sectionName,
+                                                mealIndex,
+                                              })
+                                            }
+                                            className="bg-gray-200 rounded-full w-6 h-6 flex items-center justify-center"
+                                          >
+                                            +
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              }
+                            )}
+                          </div>
+                        </div>
+                      </Disclosure.Panel>
+                    </Disclosure>
+                  ))}
+              </div>
+            ) : null}
+            <div className="flex flex-col w-full max-w-96">
+              <div className="p-4">
+                <p className="p-2 rounded bg text-justify">
+                  NB: Tu peux prendre jusqu'à 2 crêpes salées, et plein de
+                  crêpes sucrées !
+                </p>
+              </div>
+              <Transition
+                as="div"
+                className="sticky inset-x-0 bottom-0 w-full rounded-t-2xl p-4 bg"
+                show={values(orderRecap).some(
+                  (order) => order.items.length > 0
+                )}
+                enter="transition-all duration-[400ms] ease-in-out"
+                enterFrom="transform translate-y-full"
+                enterTo="transform translate-y-0"
+                leave="transition-all duration-[400ms] ease-in-out"
+                leaveFrom="transform translate-y-0"
+                leaveTo="transform translate-y-full"
+              >
+                <div key={menu + "recap"} className="flex flex-col">
+                  {entries(orderRecap)
+                    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+                    .map(([section, order]) => (
+                      <div key={section + "recap"} className="flex flex-col">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold">{section}</h4>
+                          <p>{order.price}€</p>
+                        </div>
+                        {order.items.map((item) => (
+                          <div
+                            key={item.section + item.section + item.meal}
+                            className="flex items-center gap-2"
+                          >
+                            <p className="font-semibold">{item.qty}</p>
+                            <p>{item.meal}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  {needsDeliveryInfo && (
+                    <>
+                      <Disclosure>
+                        {({ open }) => (
+                          <>
+                            <Disclosure.Button className="flex items-center justify-center w-full gap-2 font-semibold px-2 py-1">
+                              Infos de livraison
+                              <FontAwesomeIcon
+                                icon={faChevronDown}
+                                className={`${
+                                  open && "transform -rotate-180"
+                                } transition duration-200`}
+                              />
+                            </Disclosure.Button>
+                            <Disclosure.Panel className="flex flex-col gap-2">
+                              <p className="text-sm text-gray-500">
+                                Les champs avec * sont obligatoires. Livraison
+                                côté Centrale à 20h30, hors plateau à 22h
+                                {values(deliveryOptions).every(
+                                  (o) => o.type == "residence"
+                                )
+                                  ? ", livraisons en résidence uniquement"
+                                  : ""}
+                              </p>
+                              {values(deliveryOptions).some(
+                                (o) => o.type == "city"
+                              ) && (
+                                <div className="flex gap-2 items-center">
+                                  <input
+                                    type="checkbox"
+                                    onChange={(e) =>
+                                      setlivesOutsideResidence(e.target.checked)
+                                    }
+                                    checked={livesOutsideResidence}
+                                    className="border rounded w-6 h-6 accent-black"
+                                  />
+                                  <label htmlFor="livesOutsideResidence">
+                                    Je n'habite pas en résidence
+                                  </label>
+                                </div>
+                              )}
+                              {livesOutsideResidence ? (
+                                <>
+                                  <div className="flex flex-col w-full">
+                                    <label htmlFor="delivery.city">
+                                      Ville*
+                                    </label>
+                                    <select
+                                      className="border rounded px-2 py-1"
+                                      {...register("delivery.city", {
+                                        required: true,
+                                        shouldUnregister: true,
+                                      })}
+                                    >
+                                      <option value="">Choisir</option>
+                                      {values(deliveryOptions)
+                                        .filter(
+                                          (option) => option.type == "city"
+                                        )
+                                        .map((option) => (
+                                          <option
+                                            key={option.place}
+                                            value={JSON.stringify(option)}
+                                          >
+                                            {option.place}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                  <div className="flex flex-col w-full">
+                                    <label htmlFor="delivery.address">
+                                      Addresse*
+                                    </label>
+                                    <input
+                                      className="border rounded px-2 py-1"
+                                      {...register("delivery.address", {
+                                        required: true,
+                                        shouldUnregister: true,
+                                      })}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col w-full">
+                                    <label htmlFor="delivery.address2">
+                                      Complément d'addresse
+                                    </label>
+                                    <input
+                                      className="border rounded px-2 py-1"
+                                      {...register("delivery.address2", {
+                                        shouldUnregister: true,
+                                      })}
+                                    />
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex flex-col w-full">
+                                    <label>Résidence*</label>
+                                    <select
+                                      className="border rounded px-2 py-1"
+                                      {...register("delivery.residence", {
+                                        required: true,
+                                        shouldUnregister: true,
+                                      })}
+                                    >
+                                      <option value="">Choisir</option>
+                                      {values(deliveryOptions)
+                                        .filter(
+                                          (option) => option.type == "residence"
+                                        )
+                                        .map((option) => (
+                                          <option
+                                            key={option.place}
+                                            value={JSON.stringify(option)}
+                                          >
+                                            {option.place}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                  <div className="flex flex-col w-full">
+                                    <label htmlFor="delivery.address2">
+                                      Chambre/Appartement*
+                                    </label>
+                                    <input
+                                      className="border rounded px-2 py-1"
+                                      {...register("delivery.chamber", {
+                                        required: true,
+                                        shouldUnregister: true,
+                                      })}
+                                    />
+                                  </div>
+                                </>
+                              )}
+                              <div className="flex flex-col w-full">
+                                <label htmlFor="delivery.deliveryTime">
+                                  Heure de livraison*
+                                </label>
+                                <select
+                                  className="border rounded px-2 py-1"
+                                  {...register("delivery.deliveryTime", {
+                                    required: true,
+                                  })}
+                                >
+                                  <option value="">Choisir</option>
+                                  {deliveryTimes.map((time) => (
+                                    <option key={time} value={time}>
+                                      {time}
+                                    </option>
+                                  ))}
+                                </select>
+                                <label htmlFor="delivery.additionalInfo">
+                                  Instructions de livraison
+                                </label>
+                                <input
+                                  className="border rounded px-2 py-1"
+                                  {...register("delivery.additionalInfo")}
+                                  placeholder="Code d'entrée, étage, possession d'un bon, etc."
+                                />
+                              </div>
+                            </Disclosure.Panel>
+                          </>
+                        )}
+                      </Disclosure>
+                    </>
+                  )}
+                </div>
+                <button
+                  disabled={isPending || missingDeliveryInfo}
+                  onClick={() => mutate()}
+                  className="w-full bg-gray-950 text-white font-semibold p-4 mt-4 rounded flex justify-center items-center gap-2"
+                >
+                  {missingDeliveryInfo && "Il manque des infos Morray"}
+                  {!missingDeliveryInfo &&
+                    (isPending
+                      ? "Ça arrive"
+                      : "Commander (" +
+                        String(
+                          Math.round(
+                            Object.values(orderRecap).reduce(
+                              (acc, order) => (acc += order.price),
+                              0
+                            ) * 100
+                          ) / 100
+                        ) +
+                        "€)")}
+                  {isPending && <Spinner className="border-white" />}
+                </button>
+              </Transition>
+            </div>
+          </main>
+        ) : (
+          <main className="flex-grow flex justify-center items-center">
             <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+              src={"/sad.jpg"}
+              alt="C'est trop triste :("
+              width={250}
+              height={250}
             />
-          </a>
-        </div>
+          </main>
+        )}
       </div>
+    </NavWrapper>
+  )
+}
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+const DeliveryTimes = () => {
+  const [djs] = useState(
+    dayjs()
+      .subtract(dayjs().minute() % 15, "m")
+      .add(30, "m")
+  )
 
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
+  return (
+    <>
+      {new Array(16).fill(0).map((_, i) => (
+        <option
+          key={`deliveryTime${i}`}
+          value={djs.add(i * 15, "m").format("HH[h]mm")}
         >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50 text-balance`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  );
+          {djs.add(i * 15, "m").format("HH[h]mm")}
+        </option>
+      ))}
+    </>
+  )
 }
