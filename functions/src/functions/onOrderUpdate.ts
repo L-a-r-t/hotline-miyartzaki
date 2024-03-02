@@ -40,5 +40,13 @@ export const onOrderUpdate = onDocumentUpdated(
         status: "delivered",
       })
     }
+    if (
+          before.status == "delivered" &&
+          Object.values(after.menus).some((menu) => menu.status == "delivered")
+      ) {
+          await firestore().doc(`orders/${event.params?.orderId}`).update({
+              status: "preparation",
+          })
+      }
   }
 )

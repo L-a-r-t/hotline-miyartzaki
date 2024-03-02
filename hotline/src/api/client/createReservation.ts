@@ -22,7 +22,7 @@ export default async function createReservation({
             : data.price
         if (!acc.menus[menu]) acc.menus[menu] = {} as any
         acc.menus[menu].name = data.items[0].section
-        acc.menus[menu].status = acc.price == 0 ? "preparation" : "pending"
+        acc.menus[menu].status = acc.price == "pending"
         acc.menus[menu].type = data.items[0].time as any
         acc.menus[menu].qty = 1
         acc.menus[menu].content = data.items.reduce((acc, item) => {

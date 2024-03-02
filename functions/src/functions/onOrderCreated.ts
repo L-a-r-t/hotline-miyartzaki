@@ -30,7 +30,7 @@ export const onOrderCreated = onDocumentCreated(
               phone: author.phone,
             }
           : null,
-        status: data.price == 0 ? "preparation" : "pending",
+        status: "pending",
       })
 
     if (data.ordertype == "reservation" && data.type == "diner2") {
