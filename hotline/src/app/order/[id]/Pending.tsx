@@ -117,7 +117,7 @@ export default function PendingOrderPage({ order }: { order: Order }) {
             plus annuler ta commande une fois le paiement effectué.
           </p>
           <Link
-            href="https://lydia-app.com/pots?id=41176-stat-wars"
+            href="https://lydia-app.com/pots?id=85436-miyartzaki"
             target="_blank"
             className="bg-blue-700 bg-opacity-80 backdrop-blur-sm w-full py-8 rounded-xl text-lg text-white font-bold text-center"
           >

@@ -75,7 +75,8 @@ export default function HotlinePage() {
   const { isPending, mutate } = useMutation({
     mutationKey: ["createOrder"],
     mutationFn: () => {
-      const {
+      let {
+        tetine,
         delivery: {
           address,
           address2,
@@ -86,6 +87,7 @@ export default function HotlinePage() {
           deliveryTime,
         },
       } = getValues()
+      if (tetine) additionalInfo = "[BON POUR TÉTINE] " + additionalInfo
       const delivery: Delivery = residence
         ? {
             type: "residence",
@@ -301,12 +303,31 @@ export default function HotlinePage() {
                           <div className="flex flex-col gap-4">
                             {Object.values(section.meals).map(
                               (meal, mealIndex) => {
+                                const totalQty = values(orderRecap).reduce(
+                                  (acc, order) => {
+                                    return (
+                                      acc +
+                                      order.items.reduce((acc, item) => {
+                                        return (
+                                          acc +
+                                          (item.section == sectionName
+                                            ? item.qty
+                                            : 0)
+                                        )
+                                      }, 0)
+                                    )
+                                  },
+                                  0
+                                )
                                 const stock =
                                   meal.stock < 0
                                     ? sectionName.includes("salée")
                                       ? 1
-                                      : 3
+                                      : 2
                                     : 0
+                                const totalStock = sectionName.includes("salée")
+                                  ? 99
+                                  : 2
                                 return (
                                   <div
                                     key={menu.id + sectionName + meal.id}
@@ -345,7 +366,7 @@ export default function HotlinePage() {
                                                     mealIndex,
                                                   })
                                                 }
-                                                className="bg-gray-200 rounded-full w-6 h-6 flex items-center justify-center"
+                                                className="bg-white border rounded-full w-6 h-6 flex items-center justify-center"
                                               >
                                                 -
                                               </button>
@@ -355,19 +376,20 @@ export default function HotlinePage() {
                                             </>
                                           )}
                                         {(meal.qty === undefined ||
-                                          meal.qty < stock) && (
-                                          <button
-                                            onClick={() =>
-                                              incrementMeal(1, {
-                                                sectionName,
-                                                mealIndex,
-                                              })
-                                            }
-                                            className="bg-gray-200 rounded-full w-6 h-6 flex items-center justify-center"
-                                          >
-                                            +
-                                          </button>
-                                        )}
+                                          meal.qty < stock) &&
+                                          totalQty < totalStock && (
+                                            <button
+                                              onClick={() =>
+                                                incrementMeal(1, {
+                                                  sectionName,
+                                                  mealIndex,
+                                                })
+                                              }
+                                              className="bg-white border rounded-full w-6 h-6 flex items-center justify-center"
+                                            >
+                                              +
+                                            </button>
+                                          )}
                                       </div>
                                     )}
                                   </div>
@@ -384,232 +406,234 @@ export default function HotlinePage() {
             <div className="flex flex-col w-full max-w-96">
               <div className="p-4">
                 <p className="p-2 rounded bg text-justify">
-                  NB: Tu peux prendre jusqu'à 2 crêpes salées, et plein de
-                  crêpes sucrées !
+                  NB: Tu peux prendre jusqu'à 2 crêpes salées et 2 crêpes
+                  sucrées !
                 </p>
               </div>
-              <Transition
-                as="div"
-                className="sticky inset-x-0 bottom-0 w-full rounded-t-2xl p-4 bg"
-                show={values(orderRecap).some(
-                  (order) => order.items.length > 0
-                )}
-                enter="transition-all duration-[400ms] ease-in-out"
-                enterFrom="transform translate-y-full"
-                enterTo="transform translate-y-0"
-                leave="transition-all duration-[400ms] ease-in-out"
-                leaveFrom="transform translate-y-0"
-                leaveTo="transform translate-y-full"
-              >
-                <div key={menu + "recap"} className="flex flex-col">
-                  {entries(orderRecap)
-                    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-                    .map(([section, order]) => (
-                      <div key={section + "recap"} className="flex flex-col">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-lg font-semibold">{section}</h4>
-                          <p>{order.price}€</p>
-                        </div>
-                        {order.items.map((item) => (
-                          <div
-                            key={item.section + item.section + item.meal}
-                            className="flex items-center gap-2"
-                          >
-                            <p className="font-semibold">{item.qty}</p>
-                            <p>{item.meal}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  {needsDeliveryInfo && (
-                    <>
-                      <Disclosure>
-                        {({ open }) => (
-                          <>
-                            <Disclosure.Button className="flex items-center justify-center w-full gap-2 font-semibold px-2 py-1">
-                              Infos de livraison
-                              <FontAwesomeIcon
-                                icon={faChevronDown}
-                                className={`${
-                                  open && "transform -rotate-180"
-                                } transition duration-200`}
-                              />
-                            </Disclosure.Button>
-                            <Disclosure.Panel className="flex flex-col gap-2">
-                              <p className="text-sm text-gray-500">
-                                Les champs avec * sont obligatoires. Livraison
-                                côté Centrale à 20h30, hors plateau à 22h
-                                {values(deliveryOptions).every(
-                                  (o) => o.type == "residence"
-                                )
-                                  ? ", livraisons en résidence uniquement"
-                                  : ""}
-                              </p>
-                              {values(deliveryOptions).some(
-                                (o) => o.type == "city"
-                              ) && (
-                                <div className="flex gap-2 items-center">
-                                  <input
-                                    type="checkbox"
-                                    onChange={(e) =>
-                                      setlivesOutsideResidence(e.target.checked)
-                                    }
-                                    checked={livesOutsideResidence}
-                                    className="border rounded w-6 h-6 accent-black"
-                                  />
-                                  <label htmlFor="livesOutsideResidence">
-                                    Je n'habite pas en résidence
-                                  </label>
-                                </div>
-                              )}
-                              {livesOutsideResidence ? (
-                                <>
-                                  <div className="flex flex-col w-full">
-                                    <label htmlFor="delivery.city">
-                                      Ville*
-                                    </label>
-                                    <select
-                                      className="border rounded px-2 py-1"
-                                      {...register("delivery.city", {
-                                        required: true,
-                                        shouldUnregister: true,
-                                      })}
-                                    >
-                                      <option value="">Choisir</option>
-                                      {values(deliveryOptions)
-                                        .filter(
-                                          (option) => option.type == "city"
-                                        )
-                                        .map((option) => (
-                                          <option
-                                            key={option.place}
-                                            value={JSON.stringify(option)}
-                                          >
-                                            {option.place}
-                                          </option>
-                                        ))}
-                                    </select>
-                                  </div>
-                                  <div className="flex flex-col w-full">
-                                    <label htmlFor="delivery.address">
-                                      Addresse*
-                                    </label>
-                                    <input
-                                      className="border rounded px-2 py-1"
-                                      {...register("delivery.address", {
-                                        required: true,
-                                        shouldUnregister: true,
-                                      })}
-                                    />
-                                  </div>
-                                  <div className="flex flex-col w-full">
-                                    <label htmlFor="delivery.address2">
-                                      Complément d'addresse
-                                    </label>
-                                    <input
-                                      className="border rounded px-2 py-1"
-                                      {...register("delivery.address2", {
-                                        shouldUnregister: true,
-                                      })}
-                                    />
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="flex flex-col w-full">
-                                    <label>Résidence*</label>
-                                    <select
-                                      className="border rounded px-2 py-1"
-                                      {...register("delivery.residence", {
-                                        required: true,
-                                        shouldUnregister: true,
-                                      })}
-                                    >
-                                      <option value="">Choisir</option>
-                                      {values(deliveryOptions)
-                                        .filter(
-                                          (option) => option.type == "residence"
-                                        )
-                                        .map((option) => (
-                                          <option
-                                            key={option.place}
-                                            value={JSON.stringify(option)}
-                                          >
-                                            {option.place}
-                                          </option>
-                                        ))}
-                                    </select>
-                                  </div>
-                                  <div className="flex flex-col w-full">
-                                    <label htmlFor="delivery.address2">
-                                      Chambre/Appartement*
-                                    </label>
-                                    <input
-                                      className="border rounded px-2 py-1"
-                                      {...register("delivery.chamber", {
-                                        required: true,
-                                        shouldUnregister: true,
-                                      })}
-                                    />
-                                  </div>
-                                </>
-                              )}
-                              <div className="flex flex-col w-full">
-                                <label htmlFor="delivery.deliveryTime">
-                                  Heure de livraison*
-                                </label>
-                                <select
-                                  className="border rounded px-2 py-1"
-                                  {...register("delivery.deliveryTime", {
-                                    required: true,
-                                  })}
-                                >
-                                  <option value="">Choisir</option>
-                                  {deliveryTimes.map((time) => (
-                                    <option key={time} value={time}>
-                                      {time}
-                                    </option>
-                                  ))}
-                                </select>
-                                <label htmlFor="delivery.additionalInfo">
-                                  Instructions de livraison
-                                </label>
-                                <input
-                                  className="border rounded px-2 py-1"
-                                  {...register("delivery.additionalInfo")}
-                                  placeholder="Code d'entrée, étage, possession d'un bon, etc."
-                                />
-                              </div>
-                            </Disclosure.Panel>
-                          </>
-                        )}
-                      </Disclosure>
-                    </>
-                  )}
-                </div>
-                <button
-                  disabled={isPending || missingDeliveryInfo}
-                  onClick={() => mutate()}
-                  className="w-full bg-gray-950 text-white font-semibold p-4 mt-4 rounded flex justify-center items-center gap-2"
-                >
-                  {missingDeliveryInfo && "Il manque des infos Morray"}
-                  {!missingDeliveryInfo &&
-                    (isPending
-                      ? "Ça arrive"
-                      : "Commander (" +
-                        String(
-                          Math.round(
-                            Object.values(orderRecap).reduce(
-                              (acc, order) => (acc += order.price),
-                              0
-                            ) * 100
-                          ) / 100
-                        ) +
-                        "€)")}
-                  {isPending && <Spinner className="border-white" />}
-                </button>
-              </Transition>
             </div>
+            <Transition
+              as="div"
+              className="sticky inset-x-0 bottom-0 w-full max-w-96 rounded-t-2xl p-4 bg-md"
+              show={values(orderRecap).some((order) => order.items.length > 0)}
+              enter="transition-all duration-[400ms] ease-in-out"
+              enterFrom="transform translate-y-full"
+              enterTo="transform translate-y-0"
+              leave="transition-all duration-[400ms] ease-in-out"
+              leaveFrom="transform translate-y-0"
+              leaveTo="transform translate-y-full"
+            >
+              <div key={menu + "recap"} className="flex flex-col">
+                {entries(orderRecap)
+                  .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+                  .map(([section, order]) => (
+                    <div key={section + "recap"} className="flex flex-col">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-lg font-semibold">{section}</h4>
+                        <p>{order.price}€</p>
+                      </div>
+                      {order.items.map((item) => (
+                        <div
+                          key={item.section + item.section + item.meal}
+                          className="flex items-center gap-2"
+                        >
+                          <p className="font-semibold">{item.qty}</p>
+                          <p>{item.meal}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                {needsDeliveryInfo && (
+                  <>
+                    <Disclosure>
+                      {({ open }) => (
+                        <>
+                          <Disclosure.Button className="flex items-center justify-center w-full gap-2 font-semibold px-2 py-1">
+                            Infos de livraison
+                            <FontAwesomeIcon
+                              icon={faChevronDown}
+                              className={`${
+                                open && "transform -rotate-180"
+                              } transition duration-200`}
+                            />
+                          </Disclosure.Button>
+                          <Disclosure.Panel className="flex flex-col gap-2">
+                            <p className="text-sm text-gray-500">
+                              Les champs avec * sont obligatoires. Livraison
+                              côté Centrale à 20h30, hors plateau à 22h
+                              {values(deliveryOptions).every(
+                                (o) => o.type == "residence"
+                              )
+                                ? ", livraisons en résidence uniquement"
+                                : ""}
+                            </p>
+                            {values(deliveryOptions).some(
+                              (o) => o.type == "city"
+                            ) && (
+                              <div className="flex gap-2 items-center">
+                                <input
+                                  type="checkbox"
+                                  onChange={(e) =>
+                                    setlivesOutsideResidence(e.target.checked)
+                                  }
+                                  checked={livesOutsideResidence}
+                                  className="border rounded w-6 h-6 accent-black"
+                                />
+                                <label htmlFor="livesOutsideResidence">
+                                  Je n'habite pas en résidence
+                                </label>
+                              </div>
+                            )}
+                            {livesOutsideResidence ? (
+                              <>
+                                <div className="flex flex-col w-full">
+                                  <label htmlFor="delivery.city">Ville*</label>
+                                  <select
+                                    className="border rounded px-2 py-1"
+                                    {...register("delivery.city", {
+                                      required: true,
+                                      shouldUnregister: true,
+                                    })}
+                                  >
+                                    <option value="">Choisir</option>
+                                    {values(deliveryOptions)
+                                      .filter((option) => option.type == "city")
+                                      .map((option) => (
+                                        <option
+                                          key={option.place}
+                                          value={JSON.stringify(option)}
+                                        >
+                                          {option.place}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                                <div className="flex flex-col w-full">
+                                  <label htmlFor="delivery.address">
+                                    Addresse*
+                                  </label>
+                                  <input
+                                    className="border rounded px-2 py-1"
+                                    {...register("delivery.address", {
+                                      required: true,
+                                      shouldUnregister: true,
+                                    })}
+                                  />
+                                </div>
+                                <div className="flex flex-col w-full">
+                                  <label htmlFor="delivery.address2">
+                                    Complément d'addresse
+                                  </label>
+                                  <input
+                                    className="border rounded px-2 py-1"
+                                    {...register("delivery.address2", {
+                                      shouldUnregister: true,
+                                    })}
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex flex-col w-full">
+                                  <label>Résidence*</label>
+                                  <select
+                                    className="border rounded px-2 py-1"
+                                    {...register("delivery.residence", {
+                                      required: true,
+                                      shouldUnregister: true,
+                                    })}
+                                  >
+                                    <option value="">Choisir</option>
+                                    {values(deliveryOptions)
+                                      .filter(
+                                        (option) => option.type == "residence"
+                                      )
+                                      .map((option) => (
+                                        <option
+                                          key={option.place}
+                                          value={JSON.stringify(option)}
+                                        >
+                                          {option.place}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                                <div className="flex flex-col w-full">
+                                  <label htmlFor="delivery.address2">
+                                    Chambre/Appartement*
+                                  </label>
+                                  <input
+                                    className="border rounded px-2 py-1"
+                                    {...register("delivery.chamber", {
+                                      required: true,
+                                      shouldUnregister: true,
+                                    })}
+                                  />
+                                </div>
+                              </>
+                            )}
+                            <div className="flex flex-col gap-2 w-full">
+                              <label htmlFor="delivery.deliveryTime">
+                                Heure de livraison*
+                              </label>
+                              <select
+                                className="border rounded px-2 py-1"
+                                {...register("delivery.deliveryTime", {
+                                  required: true,
+                                })}
+                              >
+                                <option value="">Choisir</option>
+                                {deliveryTimes.map((time) => (
+                                  <option key={time} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                              <label htmlFor="delivery.additionalInfo">
+                                Instructions de livraison
+                              </label>
+                              <input
+                                className="border rounded px-2 py-1"
+                                {...register("delivery.additionalInfo")}
+                                placeholder="Code d'entrée, étage, etc."
+                              />
+                              <label className="text-sm flex items-center">
+                                <input
+                                  className="border mr-2 rounded px-2 py-1 h-4 w-4 accent-black"
+                                  type="checkbox"
+                                  {...register("tetine")}
+                                />
+                                J'ai un bon pour tétine
+                              </label>
+                            </div>
+                          </Disclosure.Panel>
+                        </>
+                      )}
+                    </Disclosure>
+                  </>
+                )}
+              </div>
+              <button
+                disabled={isPending || missingDeliveryInfo}
+                onClick={() => mutate()}
+                className="w-full bg-gray-950 text-white font-semibold p-4 mt-4 rounded flex justify-center items-center gap-2"
+              >
+                {missingDeliveryInfo && "Il manque des infos Morray"}
+                {!missingDeliveryInfo &&
+                  (isPending
+                    ? "Ça arrive"
+                    : "Commander (" +
+                      String(
+                        Math.round(
+                          Object.values(orderRecap).reduce(
+                            (acc, order) => (acc += order.price),
+                            0
+                          ) * 100
+                        ) / 100
+                      ) +
+                      "€)")}
+                {isPending && <Spinner className="border-white" />}
+              </button>
+            </Transition>
           </main>
         ) : (
           <main className="flex-grow flex justify-center items-center">
