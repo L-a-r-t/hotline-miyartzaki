@@ -413,7 +413,7 @@ export default function HotlinePage() {
             </div>
             <Transition
               as="div"
-              className="sticky inset-x-0 bottom-0 w-full max-w-96 rounded-t-2xl p-4 bg-md"
+              className="inset-x-0 bottom-0 w-full max-w-96 rounded-t-2xl p-4 bg-md"
               show={values(orderRecap).some((order) => order.items.length > 0)}
               enter="transition-all duration-[400ms] ease-in-out"
               enterFrom="transform translate-y-full"
