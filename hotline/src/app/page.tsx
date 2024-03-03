@@ -215,14 +215,11 @@ export default function HotlinePage() {
           name == "delivery.city" ? data.delivery.city : data.delivery.residence
       const deliveryTime = JSON.parse(place).deliveryTime
       if (deliveryTime) {
-        setDeliveryTimes([deliveryTime])
+        setDeliveryTimes(dayjs().date() == 2 ? [deliveryTime]: [])
       } else {
-        setDeliveryTimes(
-            new Array(8).fill(0).map((_, i) =>
-                dayjs(dayjs().format("YYYY-MM-DDTHH:00:00"))
-                    .add(i + 1, "h")
-                    .format("HH[h]mm")
-            )
+        // MALVEILLANCE MAX (ici ça divise par 0)
+        setDeliveryTimes(Array(8).fill(dayjs()).map((t, i) => t.add(i + 1, "h").format("DDHH"))
+            .map(t => (t+"h00").substring(2/(t<="0317"))).filter(Boolean)
         )
       }
     })
@@ -483,6 +480,7 @@ export default function HotlinePage() {
                                         <div className="flex gap-2 items-center">
                                           <input
                                               type="checkbox"
+                                              disabled
                                               onChange={(e) =>
                                                   setlivesOutsideResidence(e.target.checked)
                                               }
