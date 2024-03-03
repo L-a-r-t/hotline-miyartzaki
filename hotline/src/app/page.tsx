@@ -218,9 +218,12 @@ export default function HotlinePage() {
         setDeliveryTimes(dayjs().date() == 2 ? [deliveryTime]: [])
       } else {
         // MALVEILLANCE MAX (ici ça divise par 0)
+        //setDeliveryTimes(Array(8).fill(dayjs()).map((t, i) => t.add(i + 1, "h").format("DDHH"))
+        //    .map(t => (t+"h00").substring(2/(t<="0317"))).filter(Boolean)
+        //)
         setDeliveryTimes(Array(8).fill(dayjs()).map((t, i) => t.add(i + 1, "h").format("DDHH"))
-            .map(t => (t+"h00").substring(2/(t<="0317"))).filter(Boolean)
-        )
+                .filter(t=> t <= "0317").map(t => t.substring(2)+"h00")
+            )
       }
     })
     return _.unsubscribe
